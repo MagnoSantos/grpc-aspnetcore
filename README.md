@@ -33,6 +33,62 @@ Chamadas gRPC são enviadas geralmente por soquetes tcp. No entant, se o cliente
 Necessário possuir o SDK do .NET Core 6.0:
 * Disponível em: https://dotnet.microsoft.com/download/dotnet/6.0
 
+### Configure gRPC client
+
+Os clientes gRPC são tipos concretos gerados através de arquivos .proto. Este tem métodos que traduzem para o serviço gRPC no .proto arquivo. No nosso exemplo, o serviço chamado ```Greeter```gera um ```GreeterClient``` com métodos para chamar o serviço. 
+
+```csharp 
+var channel = GrpcChannel.ForAddress("https://localhost:[porta]");
+var client = new Greet.GreeterClient(channel);
+```
+
+Quando um canal é criado ele representa uma conexão de longa duração com serviço gRPC. Configura por exemplo, o ```HttpClient```usado para fazer as chamadas, o tamnanho máximo do envio e recebimento de mensagens, etc. 
+
+## Configure TLS
+
+Para configurar um canal gRPC para usar TLS, verifique se o endereço com servidor começa com ```https```. O canal gRPC negocia automaticamente uma conexão protegida por TLS e usa uma conexão segura para fazer as chamadas gRPC. Para serviços não seguros ```http```.
+
+## Transient Fault Handling
+
+Você pode tratar exeções do tipo RPC Exceptions para detectar falhas transitórias (como perda de conectividade de rede ou timeout)
+e usar lógica integrada para novas tentativas automáticas que podem ser configuradas em um channel. 
+
+```csharp
+var defaultMethodConfig = new MethodConfig
+{
+    Names = { MethodName.Default },
+    RetryPolicy = new RetryPolicy
+    {
+        MaxAttempts = 3,
+        InitialBackoff = TimeSpan.FromSeconds(1),
+        MaxBackoff = TimeSpan.FromSeconds(5),
+        BackoffMultiplier = 1.5,
+        RetryableStatusCodes = { StatusCode.Unavailable }
+    }
+};
+
+var channel = GrpcChannel.ForAddress("https://localhost:7135", new GrpcChannelOptions
+{
+    ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } }
+});
+```
+
+## Client-Side Load Balancing
+
+Com o balanceamento de carga do lado do cliente, você pode fazer com que os clientes gRPC distribuam a carga de maneira ideal entre os servidores. Ele elimina a necessida de ter um proxy para balanceamento de carga. 
+
+- Service Discovery: atual com oum resolvedor e faz uma consulta DNS para obter os IPS do servidor onde o gRPC está hospedado
+- Balanceador de carga: cria uma conexão e escolhe o endereço usando várias configurações, como lógica PickFirst e RoundRobin. 
+
+```csharp
+var channel = GrpcChannel.ForAddress("dns://my-example-host", new GrpcChannelOptions
+  {
+    Credentials = Channel.Credentials.Insecure,
+    ServiceConfig = new ServiceConfig
+    { LoadBalancingConfig = { new RoundRobinConfig() };
+  }
+});
+```
 
 <!-- LICENSE -->
 ## License
